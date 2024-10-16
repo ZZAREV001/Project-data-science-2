@@ -32,15 +32,26 @@ except Exception as e:
 def handle_missing_values(df):
     # Check for missing values
     missing_values = df.isnull().sum()
-    print("Missing values per column:\n", missing_values)
+    print("Missing values per column before handling:\n", missing_values)
+    
+    # Impute missing numerical values with mean or median
+    numerical_columns = ['calories', 'carbohydrate', 'sugar', 'protein']
+    for col in numerical_columns:
+        df[col].fillna(df[col].median(), inplace=True)
+    
+    # Handle missing values in 'high_traffic'
+    # Option 1: Fill with the mode
+    df['high_traffic'].fillna(df['high_traffic'].mode()[0], inplace=True)
+    
+    # Option 2: Fill with a new category 'Unknown' and update mapping in encoding function
+    # df['high_traffic'].fillna('Unknown', inplace=True)
+    
+    # After handling missing values, check again
+    missing_values_after = df.isnull().sum()
+    print("Missing values per column after handling:\n", missing_values_after)
+    
+    return df
 
-    # Optionally, drop rows with missing values
-    df_cleaned = df.dropna()
-
-    # Alternatively, you can fill missing values with appropriate statistics
-    # df['calories'].fillna(df['calories'].mean(), inplace=True)
-
-    return df_cleaned
 
 def remove_duplicates(df):
     # Check for duplicates
@@ -106,21 +117,31 @@ def validate_numerical_values(df):
 def encode_categorical_variables(df):
     # One-hot encode 'category'
     df_encoded = pd.get_dummies(df, columns=['category'], prefix='cat')
-
-    # Encode 'high_traffic' as binary
-    df_encoded['high_traffic'] = df_encoded['high_traffic'].map({'High': 1, 'Low': 0})
-
+    
+    # Encode 'high_traffic' as binary, handle 'Unknown' if added
+    traffic_mapping = {'High': 1, 'Low': 0}
+    # If 'Unknown' category exists, decide how to handle it, e.g., assign a new value or drop
+    df_encoded['high_traffic'] = df_encoded['high_traffic'].map(traffic_mapping)
+    
+    # If 'high_traffic' still contains NaN (due to unmapped categories), handle it
+    df_encoded['high_traffic'].fillna(-1, inplace=True)  # Assign -1 for 'Unknown' or missing
+    
+    # Ensure that one-hot encoded columns are of integer type
+    category_columns = [col for col in df_encoded.columns if col.startswith('cat_')]
+    df_encoded[category_columns] = df_encoded[category_columns].astype(int)
+    
     return df_encoded
 
 def preprocess_data(df):
+    df = correct_data_types(df)
     df = handle_missing_values(df)
     df = remove_duplicates(df)
-    df = correct_data_types(df)
     df = standardize_categories(df)
-    df = handle_outliers(df)
     df = validate_numerical_values(df)
+    df = handle_outliers(df)
     df = encode_categorical_variables(df)
     return df
+
 
 # Main Execution Block
 
