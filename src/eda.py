@@ -1,0 +1,230 @@
+import hypernetx as hnx
+import plotly.graph_objects as go
+import networkx as nx
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+import json
+import pandas as pd  
+import numpy as np
+
+def analyze_hypergraph(json_file_path):
+    """
+    Analyze and visualize the hypergraph from a JSON file.
+    """
+    # Load the hypergraph data from JSON file
+    with open(json_file_path, 'r') as f:
+        hypergraph_edges = json.load(f)
+    
+    # Filter hypergraph data to limit the number of hyperedges
+    selected_hyperedges = ['cat_Breakfast', 'cat_Chicken', 'high_traffic']
+    selected_recipes = ['1', '2', '3', '4', '5']  # Replace with actual recipe IDs as strings
+    
+    filtered_edges = {}
+    for key in selected_hyperedges:
+        filtered_edges[key] = [recipe for recipe in hypergraph_edges.get(key, []) if recipe in selected_recipes]
+    
+    # Remove empty hyperedges
+    filtered_edges = {k: v for k, v in filtered_edges.items() if v}
+    
+    H_filtered = hnx.Hypergraph(filtered_edges)
+    
+    # Prepare node labels (e.g., mapping recipe IDs to names)
+    recipe_id_to_name = {
+        '1': 'Pancakes',
+        '2': 'Omelette',
+        '3': 'Chicken Salad',
+        '4': 'Smoothie',
+        '5': 'French Toast'
+        # Add more mappings as needed
+    }
+    
+    node_labels = {node: recipe_id_to_name.get(node, node) for node in H_filtered.nodes}
+    
+    # Define node colors based on attributes
+    # Assuming you have high traffic recipes in 'high_traffic' hyperedge
+    high_traffic_recipes = set(hypergraph_edges.get('high_traffic', []))
+    node_colors = ['red' if node in high_traffic_recipes else 'blue' for node in H_filtered.nodes]
+    
+    # Convert hypergraph to NetworkX graph for visualization
+    G = H_filtered.dual().bipartite()
+    
+    # Generate positions for nodes
+    pos = nx.spring_layout(G)
+    
+    # Create edge traces for Plotly
+    edge_x = []
+    edge_y = []
+    for edge in G.edges():
+        x0, y0 = pos[edge[0]]
+        x1, y1 = pos[edge[1]]
+        edge_x.extend([x0, x1, None])
+        edge_y.extend([y0, y1, None])
+    
+    edge_trace = go.Scatter(
+        x=edge_x,
+        y=edge_y,
+        line=dict(width=1, color='#888'),
+        hoverinfo='none',
+        mode='lines')
+    
+    # Create node traces for Plotly
+    node_x = []
+    node_y = []
+    node_text = []
+    node_color = []
+    for node in G.nodes():
+        x, y = pos[node]
+        node_x.append(x)
+        node_y.append(y)
+        node_text.append(node_labels.get(node, node))
+        if node in high_traffic_recipes:
+            node_color.append('red')
+        else:
+            node_color.append('blue')
+    
+    node_trace = go.Scatter(
+        x=node_x,
+        y=node_y,
+        text=node_text,
+        mode='markers+text',
+        textposition='top center',
+        hoverinfo='text',
+        marker=dict(
+            showscale=False,
+            color=node_color,
+            size=10,
+            line_width=2))
+    
+    # Create figure
+    fig = go.Figure(data=[edge_trace, node_trace],
+                    layout=go.Layout(
+                        title='Interactive Hypergraph Visualization',
+                        showlegend=False,
+                        hovermode='closest',
+                        margin=dict(b=20, l=5, r=5, t=40),
+                        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False)))
+    
+    # Display the plot
+    fig.show()
+
+def analyze_cleaned_csv(csv_file_path):
+    """
+    Analyze the cleaned CSV dataset.
+    """
+    # Load the cleaned dataset
+    df = pd.read_csv(csv_file_path)
+    
+    # Example analyses:
+    # 1. Summary statistics
+    print("Summary Statistics:")
+    print(df.describe())
+    
+    # 2. Distribution plots (histograms)
+    import matplotlib.pyplot as plt
+    numeric_columns = ['calories', 'carbohydrate', 'sugar', 'protein', 'servings']
+    df[numeric_columns].hist(bins=15, figsize=(15, 10))
+    plt.tight_layout()
+    plt.show()
+    
+    # 3. Correlation matrix
+    print("Correlation Matrix:")
+    print(df[numeric_columns].corr())
+    
+    # 4. Scatter plot matrix
+    pd.plotting.scatter_matrix(df[numeric_columns], figsize=(15, 10))
+    plt.tight_layout()
+    plt.show()
+    
+    # 5. Category counts
+    category_columns = [col for col in df.columns if col.startswith('cat_')]
+    category_counts = df[category_columns].sum().sort_values(ascending=False)
+    print("Category Counts:")
+    print(category_counts)
+    
+    # Plot category counts
+    category_counts.plot(kind='bar', figsize=(12, 6))
+    plt.title('Number of Recipes per Category')
+    plt.xlabel('Category')
+    plt.ylabel('Number of Recipes')
+    plt.tight_layout()
+    plt.show()
+    
+
+def visualize_hypergraph_categories(file_path, categories):
+    # Load hypergraph data from JSON file
+    with open(file_path, 'r') as f:
+        hypergraph_edges = json.load(f)
+    print("Hypergraph edges loaded from JSON.")
+
+    # Filter hypergraph edges based on selected categories
+    filtered_edges = {
+        category: hypergraph_edges[category]
+        for category in categories if category in hypergraph_edges
+    }
+    print(f"Filtered edges: {filtered_edges}")
+
+    # Check if there are any edges after filtering
+    if not filtered_edges:
+        print("No edges found for the selected categories.")
+        return
+
+    # Create the hypergraph from filtered data
+    H_filtered = hnx.Hypergraph(filtered_edges)
+    print("Hypergraph created from filtered edges.")
+
+    # Set up the plot
+    fig, ax = plt.subplots(figsize=(15, 10))
+    print("Matplotlib figure and axes created.")
+
+    # Generate distinct colors for each hyperedge
+    num_edges = len(H_filtered.edges)
+    cmap = cm.get_cmap('tab10', num_edges)
+    edge_colors_list = [cmap(i) for i in range(num_edges)]
+    edges_list = list(H_filtered.edges)
+
+    # Plot the filtered hypergraph
+    hnx.drawing.draw(
+        H_filtered,
+        ax=ax,
+        with_edge_labels=True,
+        edges_kwargs={
+            'linewidth': 1.5,
+            'color': edge_colors_list  # Pass the list of colors here
+        },
+    )
+    print("Hypergraph plotted.")
+
+    # Set title and display the plot
+    plt.title(f"Visualization of Hypergraph for Categories: {', '.join(categories)}")
+    plt.show()
+    print("Plot displayed.")
+
+
+def main():
+    """
+    Main function to execute analysis.
+    """
+    # Paths to your data files
+    json_file_path = '/Users/GoldenEagle/Desktop/Divers/Dossier-cours-IT/AI-ML-courses/Projets/Project-data-science-2/data/processed/hypergraph_edges.json'  
+    csv_file_path = '/Users/GoldenEagle/Desktop/Divers/Dossier-cours-IT/AI-ML-courses/Projets/Project-data-science-2/data/processed/cleaned_data.csv'        
+    
+    # Analyze hypergraph
+    print("Analyzing Hypergraph...")
+    analyze_hypergraph(json_file_path)
+    
+    # Analyze cleaned CSV
+    print("\nAnalyzing Cleaned CSV Data...")
+    analyze_cleaned_csv(csv_file_path)
+    
+    # Visualize hypergraph categories
+    print("\nVisualizing Hypergraph Categories...")
+    categories = [
+    'cat_Beverages', 'cat_Breakfast', 'cat_Chicken', 'cat_Dessert', 
+    'cat_Lunch/Snacks', 'cat_Meat', 'cat_One Dish Meal', 'cat_Pork',
+    'cat_Potato', 'cat_Vegetable', 'high_traffic'
+    ]
+    visualize_hypergraph_categories(json_file_path, categories)
+
+if __name__ == "__main__":
+    main()
