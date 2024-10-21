@@ -150,17 +150,27 @@ def analyze_cleaned_csv(csv_file_path):
     plt.tight_layout()
     plt.show()
     
+def visualize_selected_categories(file_path):
+    """
+    Function to visualize specific categories of a hypergraph in a simpler way.
+    Categories visualized: high_traffic, high_sugar, and cat_Vegetable.
 
-def visualize_hypergraph_categories(file_path, categories):
+    Parameters:
+    - file_path (str): Path to the JSON file containing hypergraph edges.
+
+    Returns:
+    - None: Displays the visualization.
+    """
     # Load hypergraph data from JSON file
     with open(file_path, 'r') as f:
         hypergraph_edges = json.load(f)
     print("Hypergraph edges loaded from JSON.")
 
     # Filter hypergraph edges based on selected categories
+    selected_categories = ['high_traffic', 'high_sugar', 'cat_Vegetable']
     filtered_edges = {
         category: hypergraph_edges[category]
-        for category in categories if category in hypergraph_edges
+        for category in selected_categories if category in hypergraph_edges
     }
     print(f"Filtered edges: {filtered_edges}")
 
@@ -173,32 +183,120 @@ def visualize_hypergraph_categories(file_path, categories):
     H_filtered = hnx.Hypergraph(filtered_edges)
     print("Hypergraph created from filtered edges.")
 
+    # Convert hypergraph to a NetworkX graph for easier visualization
+    G = H_filtered.bipartite()  # Converts to a bipartite graph representation
+
     # Set up the plot
-    fig, ax = plt.subplots(figsize=(15, 10))
+    fig, ax = plt.subplots(figsize=(12, 8))  # Moderate figure size for simplicity
     print("Matplotlib figure and axes created.")
 
-    # Generate distinct colors for each hyperedge
-    num_edges = len(H_filtered.edges)
-    cmap = cm.get_cmap('tab10', num_edges)
-    edge_colors_list = [cmap(i) for i in range(num_edges)]
-    edges_list = list(H_filtered.edges)
+    # Use a spring layout for better readability
+    pos = nx.spring_layout(G)
 
-    # Plot the filtered hypergraph
-    hnx.drawing.draw(
-        H_filtered,
+    # Draw the graph using NetworkX
+    nx.draw(
+        G,
+        pos,
         ax=ax,
-        with_edge_labels=True,
-        edges_kwargs={
-            'linewidth': 1.5,
-            'color': edge_colors_list  # Pass the list of colors here
-        },
+        with_labels=True,
+        node_size=150,  # Smaller nodes for a cleaner view
+        node_color='skyblue',  # Uniform color for nodes
+        edge_color='gray',  # Uniform color for edges
+        font_size=8
     )
-    print("Hypergraph plotted.")
+    print("Simplified hypergraph plotted using NetworkX.")
 
-    # Set title and display the plot
-    plt.title(f"Visualization of Hypergraph for Categories: {', '.join(categories)}")
+    # Set title and adjust layout for better readability
+    plt.title("Simplified Visualization of Hypergraph for Selected Categories: high_traffic, high_sugar, cat_Vegetable", fontsize=14)
+    plt.tight_layout(pad=2.0)  # Add some padding for spacing
     plt.show()
     print("Plot displayed.")
+
+def perform_correlation_analysis(file_path):
+    """
+    Function to perform exploratory data analysis to determine if a correlation exists between high_traffic and high_sugar recipes.
+
+    Parameters:
+    - file_path (str): Path to the JSON file containing hypergraph edges.
+
+    Returns:
+    - None: Prints correlation analysis results.
+    """
+    # Load hypergraph data from JSON file
+    with open(file_path, 'r') as f:
+        hypergraph_edges = json.load(f)
+    print("Hypergraph edges loaded from JSON.")
+
+    # Extract high_traffic and high_sugar recipes
+    high_traffic_recipes = set(hypergraph_edges.get('high_traffic', []))
+    high_sugar_recipes = set(hypergraph_edges.get('high_sugar', []))
+
+    # Create a DataFrame for correlation analysis
+    all_recipes = list(high_traffic_recipes.union(high_sugar_recipes))
+    data = {
+        'recipe_id': all_recipes,
+        'is_high_traffic': [1 if recipe in high_traffic_recipes else 0 for recipe in all_recipes],
+        'is_high_sugar': [1 if recipe in high_sugar_recipes else 0 for recipe in all_recipes]
+    }
+    df = pd.DataFrame(data)
+    print("Data prepared for correlation analysis:")
+    print(df.head())
+
+    # Perform correlation analysis
+    correlation_matrix = df[['is_high_traffic', 'is_high_sugar']].corr()
+    print("Correlation Matrix:")
+    print(correlation_matrix)
+
+    # Interpret the correlation
+    correlation_value = correlation_matrix.loc['is_high_traffic', 'is_high_sugar']
+    if correlation_value > 0.5:
+        print(f"Strong positive correlation ({correlation_value}) between high sugar content and high traffic.")
+    elif correlation_value > 0.2:
+        print(f"Moderate positive correlation ({correlation_value}) between high sugar content and high traffic.")
+    elif correlation_value > 0:
+        print(f"Weak positive correlation ({correlation_value}) between high sugar content and high traffic.")
+    else:
+        print(f"No significant positive correlation ({correlation_value}) between high sugar content and high traffic.")
+
+def perform_correlation_analysis_from_csv(csv_file_path):
+    """
+    Function to perform exploratory data analysis to determine if a correlation exists between high_traffic and high_sugar recipes from a cleaned CSV dataset.
+
+    Parameters:
+    - csv_file_path (str): Path to the CSV file containing the cleaned dataset.
+
+    Returns:
+    - None: Prints correlation analysis results.
+    """
+    # Load cleaned data from CSV file
+    df = pd.read_csv(csv_file_path)
+    print("Cleaned dataset loaded from CSV.")
+
+    # Check if the necessary columns are present
+    if 'high_traffic' not in df.columns or 'sugar' not in df.columns:
+        print("The dataset does not contain the required columns: 'high_traffic' and 'sugar'.")
+        return
+
+    # Create a binary column for high sugar content
+    sugar_threshold = df['sugar'].mean() + df['sugar'].std()  # Defining a threshold as mean + std deviation
+    df['is_high_sugar'] = df['sugar'] > sugar_threshold
+    df['is_high_sugar'] = df['is_high_sugar'].astype(int)  # Convert boolean to int (1 for high sugar, 0 otherwise)
+
+    # Perform correlation analysis
+    correlation_matrix = df[['high_traffic', 'is_high_sugar']].corr()
+    print("Correlation Matrix:")
+    print(correlation_matrix)
+
+    # Interpret the correlation
+    correlation_value = correlation_matrix.loc['high_traffic', 'is_high_sugar']
+    if correlation_value > 0.5:
+        print(f"Strong positive correlation ({correlation_value}) between high sugar content and high traffic.")
+    elif correlation_value > 0.2:
+        print(f"Moderate positive correlation ({correlation_value}) between high sugar content and high traffic.")
+    elif correlation_value > 0:
+        print(f"Weak positive correlation ({correlation_value}) between high sugar content and high traffic.")
+    else:
+        print(f"No significant positive correlation ({correlation_value}) between high sugar content and high traffic.")
 
 
 def main():
@@ -219,12 +317,15 @@ def main():
     
     # Visualize hypergraph categories
     print("\nVisualizing Hypergraph Categories...")
-    categories = [
-    'cat_Beverages', 'cat_Breakfast', 'cat_Chicken', 'cat_Dessert', 
-    'cat_Lunch/Snacks', 'cat_Meat', 'cat_One Dish Meal', 'cat_Pork',
-    'cat_Potato', 'cat_Vegetable', 'high_traffic'
-    ]
-    visualize_hypergraph_categories(json_file_path, categories)
+    visualize_selected_categories(json_file_path)
+
+    # Perform correlation analysis
+    print("\nPerforming Correlation Analysis from hypergraph...")
+    perform_correlation_analysis(json_file_path)
+
+    # Perform correlation analysis from CSV
+    print("\nPerforming Correlation Analysis from CSV...")
+    perform_correlation_analysis_from_csv(csv_file_path)
 
 if __name__ == "__main__":
     main()
