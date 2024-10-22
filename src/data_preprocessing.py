@@ -15,7 +15,7 @@ processed_data_dir = os.path.join(project_root, 'data', 'processed')
 os.makedirs(processed_data_dir, exist_ok=True)
 
 # Define the path to the local CSV file
-local_csv_path = os.path.join(raw_data_dir, 'recipe-site-traffic.csv')
+local_csv_path = os.path.join(raw_data_dir, 'recipe_site_traffic_2212.csv')
 
 # Load the CSV file with the correct delimiter and encoding
 try:
