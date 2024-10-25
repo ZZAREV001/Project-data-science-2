@@ -19,7 +19,7 @@ local_csv_path = os.path.join(raw_data_dir, 'recipe_site_traffic_2212.csv')
 
 # Load the CSV file with the correct delimiter and encoding
 try:
-    df = pd.read_csv(local_csv_path, sep=';', encoding='utf-8-sig')
+    df = pd.read_csv(local_csv_path)
     print("Data loaded successfully from local file")
     print("DataFrame columns:", df.columns.tolist())
 except Exception as e:
@@ -47,8 +47,6 @@ def handle_missing_values(df):
     
     return df
 
-
-
 def remove_duplicates(df):
     # Check for duplicates
     duplicates = df.duplicated()
@@ -60,43 +58,34 @@ def remove_duplicates(df):
     return df_no_duplicates
 
 def correct_data_types(df):
-    # Ensure numerical columns are of numeric data types
-    numeric_columns = ['calories', 'carbohydrate', 'sugar', 'protein', 'servings']
+    # Add logging
+    print("Original servings values:", df['servings'].unique())
+    
+    # Clean the servings column
+    df['servings'] = df['servings'].astype(str).str.extract('(\d+)').astype(float)
+    
+    print("Cleaned servings values:", df['servings'].unique())
+    
+    # Rest of the function remains the same
+    numeric_columns = ['calories', 'carbohydrate', 'sugar', 'protein']
     df[numeric_columns] = df[numeric_columns].apply(pd.to_numeric, errors='coerce')
-
-    # Convert 'recipe' to string if it's an identifier
-    df['recipe'] = df['recipe'].astype(str)
-
+    df['recipe'] = pd.to_numeric(df['recipe'], errors='coerce')
+    
     return df
 
-def standardize_categories(df):
-    # Strip whitespace and convert to title case for consistency
-    df['category'] = df['category'].str.strip().str.title()
-
-    # Define the expected categories
-    expected_categories = [
-        'Lunch/Snacks', 'Beverages', 'Potato', 'Vegetable', 'Meat',
-        'Chicken', 'Pork', 'Dessert', 'Breakfast', 'One Dish Meal'
+def validate_categories(df):
+    valid_categories = [
+        'Lunch/Snacks', 'Beverages', 'Potato',
+        'Vegetable', 'Meat', 'Chicken', 'Pork',
+        'Dessert', 'Breakfast', 'One Dish Meal'
     ]
-
-    # Replace any variations or typos
-    df['category'] = df['category'].replace({
-        # Add mappings if there are known typos
-    })
-
-    # Filter out unexpected categories
-    df = df[df['category'].isin(expected_categories)]
-
+    df = df[df['category'].isin(valid_categories)]
     return df
 
-def handle_outliers(df):
-    # For each numeric column, remove outliers beyond 3 standard deviations
-    numeric_columns = ['calories', 'carbohydrate', 'sugar', 'protein', 'servings']
-    for col in numeric_columns:
-        mean = df[col].mean()
-        std = df[col].std()
-        df = df[(df[col] >= mean - 3 * std) & (df[col] <= mean + 3 * std)]
-
+# Add this function:
+def validate_high_traffic(df):
+    df['high_traffic'] = df['high_traffic'].astype(str)
+    df = df[df['high_traffic'] == 'High']
     return df
 
 def validate_numerical_values(df):
@@ -105,37 +94,39 @@ def validate_numerical_values(df):
     for col in nutritional_columns:
         df = df[df[col] >= 0]
 
-    # Ensure 'servings' is at least 1
-    df = df[df['servings'] >= 1]
+    # Serving size validation (typically 1-6 servings)
+    df = df[df['servings'].between(1, 6)]
 
     return df
 
-def encode_categorical_variables(df):
-    # One-hot encode 'category'
-    df_encoded = pd.get_dummies(df, columns=['category'], prefix='cat')
-    
-    # Encode 'high_traffic' as binary
-    traffic_mapping = {'High': 1, 'Low': 0}
-    df_encoded['high_traffic'] = df_encoded['high_traffic'].map(traffic_mapping)
-    
-    # Handle any remaining NaN values in 'high_traffic'
-    df_encoded['high_traffic'] = df_encoded['high_traffic'].fillna(-1)
-    
-    # Ensure that one-hot encoded columns are of integer type
-    category_columns = [col for col in df_encoded.columns if col.startswith('cat_')]
-    df_encoded[category_columns] = df_encoded[category_columns].astype(int)
-    
-    return df_encoded
-
 
 def preprocess_data(df):
+    # First correct data types
     df = correct_data_types(df)
+    
+    # Then handle missing values and duplicates
     df = handle_missing_values(df)
     df = remove_duplicates(df)
-    df = standardize_categories(df)
+    
+    # Then validate data
+    df = validate_categories(df)
+    df = validate_high_traffic(df)
     df = validate_numerical_values(df)
-    df = handle_outliers(df)
-    df = encode_categorical_variables(df)
+    
+    # Final type enforcement
+    final_dtypes = {
+        'recipe': 'int64',
+        'calories': 'float64',
+        'carbohydrate': 'float64',
+        'sugar': 'float64',
+        'protein': 'float64',
+        'category': 'object',
+        'servings': 'float64',
+        'high_traffic': 'object'
+    }
+    
+    df = df.astype(final_dtypes)
+    
     return df
 
 # Main Execution Block
