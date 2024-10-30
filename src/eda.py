@@ -324,12 +324,6 @@ def visualize_selected_categories(file_path):
     """
     Function to visualize specific categories of a hypergraph in a simpler way.
     Categories visualized: high_traffic, high_sugar, and cat_Vegetable.
-
-    Parameters:
-    - file_path (str): Path to the JSON file containing hypergraph edges.
-
-    Returns:
-    - None: Displays the visualization.
     """
     # Load hypergraph data from JSON file
     with open(file_path, 'r') as f:
@@ -339,8 +333,8 @@ def visualize_selected_categories(file_path):
     # Filter hypergraph edges based on selected categories
     selected_categories = ['high_traffic', 'high_sugar', 'cat_Vegetable']
     filtered_edges = {
-        category: hypergraph_edges[category]
-        for category in selected_categories if category in hypergraph_edges
+        category: hypergraph_edges['edges'][category]
+        for category in selected_categories if category in hypergraph_edges['edges']
     }
     print(f"Filtered edges: {filtered_edges}")
 
@@ -354,10 +348,10 @@ def visualize_selected_categories(file_path):
     print("Hypergraph created from filtered edges.")
 
     # Convert hypergraph to a NetworkX graph for easier visualization
-    G = H_filtered.bipartite()  # Converts to a bipartite graph representation
+    G = H_filtered.bipartite()
 
     # Set up the plot
-    fig, ax = plt.subplots(figsize=(12, 8))  # Moderate figure size for simplicity
+    fig, ax = plt.subplots(figsize=(12, 8))
     print("Matplotlib figure and axes created.")
 
     # Use a spring layout for better readability
@@ -369,18 +363,212 @@ def visualize_selected_categories(file_path):
         pos,
         ax=ax,
         with_labels=True,
-        node_size=150,  # Smaller nodes for a cleaner view
-        node_color='skyblue',  # Uniform color for nodes
-        edge_color='gray',  # Uniform color for edges
+        node_size=150,
+        node_color='skyblue',
+        edge_color='gray',
         font_size=8
     )
     print("Simplified hypergraph plotted using NetworkX.")
 
     # Set title and adjust layout for better readability
-    plt.title("Simplified Visualization of Hypergraph for Selected Categories: high_traffic, high_sugar, cat_Vegetable", fontsize=14)
-    plt.tight_layout(pad=2.0)  # Add some padding for spacing
+    plt.title("Simplified Visualization of Selected Categories", fontsize=14)
+    plt.tight_layout(pad=2.0)
     plt.show()
     print("Plot displayed.")
+
+def visualize_recipe_hypergraph(json_file_path, csv_file_path, visualization_type='interactive'):
+    """
+    Visualize the recipe hypergraph with enhanced readability and interactivity.
+    """
+    # Load the hypergraph data
+    with open(json_file_path, 'r') as f:
+        data = json.load(f)
+    
+    # Load recipe details
+    df = pd.read_csv(csv_file_path)
+    
+    # Create category mapping for colors
+    category_colors = {
+        'Breakfast': '#FF9999',
+        'Lunch/Snacks': '#66B2FF',
+        'Dinner': '#99FF99',
+        'Dessert': '#FFCC99',
+        'Beverages': '#FF99CC',
+        'Vegetable': '#99FFCC',
+        'Meat': '#FF99FF',
+        'Chicken': '#FFFF99',
+        'Pork': '#99CCFF',
+        'Potato': '#FFCC99',
+        'One Dish Meal': '#CC99FF'
+    }
+
+    # Create more focused categories for visualization
+    categories = {
+        'recipe_types': [edge for edge in data['edges'].keys() if edge.startswith('category_')][:5],
+        'nutritional_high': [edge for edge in data['edges'].keys() if edge.startswith(('calories_', 'carbohydrate_', 'sugar_', 'protein_'))][:3],
+        'complexity': ['complexity_0', 'complexity_4']
+    }
+
+    if visualization_type == 'interactive':
+        H = hnx.Hypergraph({k: data['edges'][k] for category in categories.values() for k in category})
+        G = H.bipartite()
+        pos = nx.spring_layout(G, k=1, iterations=50)
+        
+        # Create edge traces
+        edge_traces = []
+        for i, (category, edges) in enumerate(categories.items()):
+            for edge_name in edges:
+                if edge_name in data['edges']:
+                    edge_x = []
+                    edge_y = []
+                    hover_text = []
+                    
+                    for node in data['edges'][edge_name]:
+                        if (edge_name, node) in pos:
+                            x0, y0 = pos[edge_name]
+                            x1, y1 = pos[node]
+                            edge_x.extend([x0, x1, None])
+                            edge_y.extend([y0, y1, None])
+                            
+                            try:
+                                recipe_id = int(node)
+                                recipe_info = df[df['recipe'] == recipe_id].iloc[0] if len(df[df['recipe'] == recipe_id]) > 0 else None
+                                if recipe_info is not None:
+                                    hover_text.append(
+                                        f"Recipe: {node}<br>"
+                                        f"Category: {recipe_info['category']}<br>"
+                                        f"Calories: {recipe_info['calories']:.0f}<br>"
+                                        f"Protein: {recipe_info['protein']:.1f}g<br>"
+                                        f"Carbs: {recipe_info['carbohydrate']:.1f}g<br>"
+                                        f"Sugar: {recipe_info['sugar']:.1f}g<br>"
+                                        f"Servings: {recipe_info['servings']}"
+                                    )
+                                else:
+                                    hover_text.append(f"Recipe: {node}")
+                            except ValueError:
+                                hover_text.append(f"Category: {node}")
+                    
+                    edge_traces.append(
+                        go.Scatter(
+                            x=edge_x,
+                            y=edge_y,
+                            line=dict(width=2, color=category_colors.get(category, '#888')),
+                            hoverinfo='text',
+                            text=hover_text,
+                            mode='lines',
+                            name=edge_name,
+                            showlegend=True
+                        )
+                    )
+        
+        # Create node trace
+        node_x, node_y, node_text, node_size, node_color, hover_text = [], [], [], [], [], []
+        
+        for node in G.nodes():
+            x, y = pos[node]
+            node_x.append(x)
+            node_y.append(y)
+            node_text.append(str(node))
+            
+            if isinstance(node, str) and any(node.startswith(prefix) for prefix in 
+                ['category_', 'complexity_', 'calories_', 'carbohydrate_', 'sugar_', 'protein_']):
+                node_size.append(30)
+                node_color.append('#FF0000')
+                hover_text.append(f"Category: {node}")
+            else:
+                try:
+                    recipe_id = int(node)
+                    recipe_info = df[df['recipe'] == recipe_id].iloc[0] if len(df[df['recipe'] == recipe_id]) > 0 else None
+                    if recipe_info is not None:
+                        node_size.append(20)
+                        node_color.append(category_colors.get(recipe_info['category'], '#888'))
+                        hover_text.append(
+                            f"Recipe: {node}<br>"
+                            f"Category: {recipe_info['category']}<br>"
+                            f"Calories: {recipe_info['calories']:.0f}<br>"
+                            f"Protein: {recipe_info['protein']:.1f}g<br>"
+                            f"Carbs: {recipe_info['carbohydrate']:.1f}g<br>"
+                            f"Sugar: {recipe_info['sugar']:.1f}g<br>"
+                            f"Servings: {recipe_info['servings']}"
+                        )
+                    else:
+                        node_size.append(15)
+                        node_color.append('#888')
+                        hover_text.append(f"Recipe: {node}")
+                except ValueError:
+                    node_size.append(15)
+                    node_color.append('#888')
+                    hover_text.append(f"Node: {node}")
+        
+        node_trace = go.Scatter(
+            x=node_x,
+            y=node_y,
+            text=node_text,
+            mode='markers+text',
+            hoverinfo='text',
+            hovertext=hover_text,
+            marker=dict(
+                size=node_size,
+                color=node_color,
+                line=dict(width=1, color='#888'),
+                symbol='circle'
+            ),
+            textposition='top center',
+            textfont=dict(size=8)
+        )
+        
+        # Create figure
+        fig = go.Figure(
+            data=edge_traces + [node_trace],
+            layout=go.Layout(
+                title={
+                    'text': 'Recipe Hypergraph Visualization<br>Hover over nodes for details',
+                    'y':0.95,
+                    'x':0.5,
+                    'xanchor': 'center',
+                    'yanchor': 'top'
+                },
+                showlegend=True,
+                hovermode='closest',
+                margin=dict(b=20, l=5, r=5, t=40),
+                xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                height=1000,
+                width=1500,
+                plot_bgcolor='rgb(248,248,248)',
+                legend=dict(
+                    title="Recipe Categories",
+                    x=1.05,
+                    y=0.5,
+                    bordercolor='#888',
+                    borderwidth=1
+                )
+            )
+        )
+        
+        fig.show()
+    else:
+        # Static visualization code here
+        plt.figure(figsize=(20, 15))
+        colors = list(category_colors.values())
+        selected_edges = {k: data['edges'][k] 
+                        for category in categories.values() 
+                        for k in category 
+                        if k in data['edges']}
+        H = hnx.Hypergraph(selected_edges)
+        hnx.draw(H,
+                with_node_labels=True,
+                with_edge_labels=True,
+                node_size=200,
+                edge_width=2,
+                node_label_size=6,
+                edge_label_size=8,
+                with_node_counts=False,
+                layout_kwargs={'seed': 42})
+        plt.title('Recipe Categories and Relationships\nNode size indicates connectivity', 
+                 fontsize=16, pad=20)
+        plt.tight_layout()
+        plt.show()
 
 def perform_correlation_analysis(file_path):
     """
